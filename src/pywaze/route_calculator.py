@@ -282,6 +282,40 @@ class WazeRouteCalculator:
         stop_at_bounds=False,
     ):
         """Calculate all route infos."""
+        routes = await self.calc_all_routes_info_detailed(
+            start,
+            end,
+            vehicle_type=vehicle_type,
+            avoid_toll_roads=avoid_toll_roads,
+            avoid_subscription_roads=avoid_subscription_roads,
+            avoid_ferries=avoid_ferries,
+            npaths=npaths,
+            time_delta=time_delta,
+            real_time=real_time,
+            stop_at_bounds=stop_at_bounds,
+        )
+        return {
+            "{}-{}".format(route["type"], route["short_name"]): (
+                route["time"],
+                route["distance"],
+            )
+            for route in routes
+        }
+
+    async def calc_all_routes_info_detailed(
+        self,
+        start: dict[str, Any],
+        end: dict[str, Any],
+        vehicle_type: Literal[None, "TAXI", "MOTORCYCLE"] = None,
+        avoid_toll_roads: bool = False,
+        avoid_subscription_roads: bool = False,
+        avoid_ferries: bool = False,
+        npaths: int = 3,
+        time_delta: int = 0,
+        real_time=True,
+        stop_at_bounds=False,
+    ):
+        """Calculate all route infos and return more detail for each."""
 
         start = await self._ensure_coords(start)
         end = await self._ensure_coords(end)
@@ -297,19 +331,24 @@ class WazeRouteCalculator:
             time_delta=time_delta,
         )
         try:
-            results = {
-                "{}-{}".format(
-                    "".join(route.get("routeType", [])[:1]),
-                    route.get("shortRouteName", "unknown"),
-                ): self._add_up_route(
+            results = []
+            for route in routes:
+                route_time, route_distance = self._add_up_route(
                     route["results" if "results" in route else "result"],
                     start["bounds"],
                     end["bounds"],
                     real_time=real_time,
                     stop_at_bounds=stop_at_bounds,
                 )
-                for route in routes
-            }
+                results.append(
+                    {
+                        "type": route.get("routeType", ["unknown"])[0],
+                        "name": route.get("routeName", "unknown"),
+                        "short_name": route.get("shortRouteName", "unknown"),
+                        "time": route_time,
+                        "distance": route_distance,
+                    }
+                )
         except KeyError as e:
             raise WRCError("wrong response") from e
         return results
